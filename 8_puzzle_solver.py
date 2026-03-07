@@ -9,68 +9,120 @@ from tkinter import messagebox, scrolledtext, ttk
 from typing import Callable, Dict, List, Optional, Set, Tuple
 
 
+# ============================================================================
+# DATA STRUCTURES SECTION
+# ============================================================================
+# This section contains all data structures used in the 8-puzzle solver:
+# - ConfigTuple: Type alias for puzzle board configuration
+# - GameNode: Represents a state in the puzzle search space
+# - AlgorithmStats: Stores metrics and results from search algorithms
+# ============================================================================
+
+# Type alias for representing a puzzle board configuration as a tuple of 9 integers
 ConfigTuple = Tuple[int, ...]
 
 
 class GameNode:
+    """
+    Represents a single state (node) in the 8-puzzle search space.
+    
+    Attributes:
+        config/board: Current board configuration (tuple of 9 integers, 0 = blank)
+        prev_node/parent: Reference to parent node for path reconstruction
+        action/move: The action that led to this state (Up/Down/Left/Right/Initial)
+        level/depth: Depth in the search tree from root (used as g(n) cost in A*)
+        empty_idx/blank_pos: Index position of blank tile (0) for efficient moves
+    
+    Methods:
+        reached_target/is_goal: Check if this is the goal state
+        generate_successors/get_neighbors: Generate all valid next states
+        display/print_board: Print the board in a formatted visual
+    
+    The class provides multiple property aliases for compatibility with different
+    naming conventions and testing frameworks.
+    """
+    
+    # Goal state configuration: blank (0) in top-left, tiles 1-8 in order
     TARGET_CONFIG: ConfigTuple = (0, 1, 2, 3, 4, 5, 6, 7, 8)
     GOAL_STATE: ConfigTuple = (0, 1, 2, 3, 4, 5, 6, 7, 8)
 
     def __init__(self, config: ConfigTuple, prev_node: Optional[GameNode] = None, 
                  action: str = "Initial", level: int = 0) -> None:
-        self.config = config
-        self.board = config
-        self.prev_node = prev_node
-        self.parent = prev_node
-        self.action = action
-        self.move = action
-        self.level = level
-        self.depth = level
-        self.empty_idx = config.index(0)
-        self.blank_pos = config.index(0)
+        # Primary attributes
+        self.config = config                    # Main board configuration
+        self.prev_node = prev_node              # Parent node for path tracing
+        self.action = action                    # Move that created this state
+        self.level = level                      # Depth from root (g-cost)
+        self.empty_idx = config.index(0)        # Blank tile position
+        
+        # Compatibility aliases for different naming conventions
+        self.board = config                     # Alias for config
+        self.parent = prev_node                 # Alias for prev_node
+        self.move = action                      # Alias for action
+        self.depth = level                      # Alias for level
+        self.blank_pos = config.index(0)        # Alias for empty_idx
 
     def __eq__(self, other: object) -> bool:
+        """Two nodes are equal if their board configurations match."""
         return isinstance(other, GameNode) and self.config == other.config
 
     def __hash__(self) -> int:
+        """Hash based on board config for use in sets/dicts (visited tracking)."""
         return hash(self.config)
 
     def __lt__(self, other: GameNode) -> bool:
+        """Comparison for heap operations in priority queue (A* search)."""
         return self.config < other.config
 
     def reached_target(self) -> bool:
+        """Check if this state is the goal state."""
         return self.config == self.TARGET_CONFIG
     
     def is_goal(self) -> bool:
+        """Alias for reached_target() - check if goal state reached."""
         return self.config == self.TARGET_CONFIG
 
     def generate_successors(self) -> List[GameNode]:
+        """
+        Generate all valid successor states by moving the blank tile.
+        Returns a list of GameNode objects representing valid moves.
+        """
         successors: List[GameNode] = []
-        row_idx, col_idx = divmod(self.empty_idx, 3)
+        row_idx, col_idx = divmod(self.empty_idx, 3)  # Convert linear index to 2D coordinates
 
+        # Define possible moves: Up, Down, Left, Right
         action_map = [("Up", -1, 0), ("Down", 1, 0), ("Left", 0, -1), ("Right", 0, 1)]
 
         for action_name, row_delta, col_delta in action_map:
             new_row, new_col = row_idx + row_delta, col_idx + col_delta
+            # Check if the new position is within the 3x3 board boundaries
             if 0 <= new_row < 3 and 0 <= new_col < 3:
                 target_idx = new_row * 3 + new_col
                 config_list = list(self.config)
+                # Swap blank tile with the target tile
                 config_list[self.empty_idx], config_list[target_idx] = config_list[target_idx], config_list[self.empty_idx]
                 successors.append(GameNode(tuple(config_list), self, action_name, self.level + 1))
 
         return successors
     
     def get_neighbors(self) -> List[GameNode]:
+        """Alias for generate_successors() - returns list of valid next states."""
         return self.generate_successors()
 
     def display(self) -> None:
+        """Display the current board state in formatted view."""
         print(render_configuration(self.config))
     
     def print_board(self) -> None:
+        """Alias for display() - prints board to console."""
         print(render_configuration(self.config))
 
 
 def render_configuration(config: ConfigTuple) -> str:
+    """
+    Converts a puzzle configuration into a formatted string representation.
+    Uses box-drawing characters to create a visual board.
+    """
     result_lines = []
     border_top = "┌─────┬─────┬─────┐"
     separator = "├─────┼─────┼─────┤"
@@ -89,59 +141,89 @@ def render_configuration(config: ConfigTuple) -> str:
 
 @dataclass
 class AlgorithmStats:
-    algo_label: str
-    visited_count: int = 0
-    max_depth: int = 0
-    solution_cost: int = 0
-    time_start: float = 0.0
-    time_end: float = 0.0
-    action_sequence: List[str] = field(default_factory=list)
-    node_sequence: List[GameNode] = field(default_factory=list)
-    found_solution: bool = False
+    """
+    Stores comprehensive performance metrics and results from search algorithm execution.
     
+    Core Metrics:
+        algo_label: Name/identifier of the algorithm (e.g., "BFS", "A* Manhattan")
+        visited_count: Number of nodes expanded/explored during search
+        max_depth: Maximum depth reached in search tree
+        solution_cost: Length of solution path (number of moves to goal)
+        time_start/time_end: Timestamps for measuring execution time
+        action_sequence: Ordered list of moves from start to goal
+        node_sequence: Ordered list of board states from start to goal
+        found_solution: Boolean indicating if goal was successfully reached
+    
+    Property Aliases:
+        Provides alternative names for compatibility (algorithm_name, nodes_expanded,
+        search_depth, path_cost, etc.)
+    """
+    algo_label: str                                          # Algorithm name
+    visited_count: int = 0                                   # Nodes explored
+    max_depth: int = 0                                       # Max search depth
+    solution_cost: int = 0                                   # Path length
+    time_start: float = 0.0                                  # Start timestamp
+    time_end: float = 0.0                                    # End timestamp
+    action_sequence: List[str] = field(default_factory=list)     # Move sequence
+    node_sequence: List[GameNode] = field(default_factory=list)  # State sequence
+    found_solution: bool = False                             # Success flag
+    
+    # Property aliases for compatibility with different naming conventions
     @property
     def algorithm_name(self) -> str:
+        """Alias for algo_label."""
         return self.algo_label
     
     @property
     def nodes_expanded(self) -> int:
+        """Alias for visited_count."""
         return self.visited_count
     
     @property
     def search_depth(self) -> int:
+        """Alias for max_depth."""
         return self.max_depth
     
     @property
     def path_cost(self) -> int:
+        """Alias for solution_cost."""
         return self.solution_cost
     
     @property
     def start_time(self) -> float:
+        """Alias for time_start."""
         return self.time_start
     
     @property
     def end_time(self) -> float:
+        """Alias for time_end."""
         return self.time_end
     
     @property
     def path_moves(self) -> List[str]:
+        """Alias for action_sequence."""
         return self.action_sequence
     
     @property
     def path_states(self) -> List[GameNode]:
+        """Alias for node_sequence."""
         return self.node_sequence
     
     @property
     def success(self) -> bool:
+        """Alias for found_solution."""
         return self.found_solution
 
     def elapsed_time(self) -> float:
+        """Calculate total algorithm execution time in seconds."""
         return self.time_end - self.time_start
     
     def running_time(self) -> float:
+        """Alias for elapsed_time() - returns execution time in seconds."""
         return self.elapsed_time()
 
     def generate_report(self) -> None:
+        """Print a formatted console report of algorithm performance and results."""
         print(f"\n{'=' * 60}")
         print(f"Algorithm: {self.algo_label}")
         print(f"{'=' * 60}")
@@ -157,7 +239,41 @@ class AlgorithmStats:
         print(f"{'=' * 60}")
 
 
+# ============================================================================
+# ALGORITHMS SECTION
+# ============================================================================
+# This section contains all search algorithms, heuristics, and utility functions:
+#
+# HELPER FUNCTIONS:
+#   - trace_back_path: Reconstruct solution path from goal to start
+#
+# HEURISTIC FUNCTIONS (for informed search):
+#   - compute_manhattan_cost: Manhattan distance heuristic (h1)
+#   - compute_euclidean_cost: Euclidean distance heuristic (h2)
+#
+# UNINFORMED SEARCH ALGORITHMS:
+#   - breadth_first_strategy: BFS - optimal, explores level-by-level
+#   - depth_first_strategy: DFS - memory efficient, uses depth limit
+#   - iterative_depth_strategy: IDDFS - combines BFS optimality + DFS efficiency
+#
+# INFORMED SEARCH ALGORITHMS:
+#   - informed_search_strategy: A* search with pluggable heuristic function
+#
+# VALIDATION & UTILITY:
+#   - count_inversions: Count tile order inversions for solvability check
+#   - check_solvability: Determine if puzzle configuration is solvable
+#   - parse_input_string: Parse user input into board configuration
+#   - execute_algorithm: Main dispatcher to run selected algorithm(s)
+#   - format_stats_report: Format algorithm results as text
+#   - format_comparison_table: Create comparison table for multiple algorithms
+#   - format_tree_visualization: Generate solution tree visualization
+# ============================================================================
+
 def trace_back_path(target_node: GameNode) -> Tuple[List[str], List[GameNode]]:
+    """
+    Reconstructs the solution path from start to goal by following parent pointers.
+    Returns a tuple of (actions, nodes) representing the path.
+    """
     actions: List[str] = []
     nodes: List[GameNode] = []
     current: Optional[GameNode] = target_node
@@ -171,6 +287,12 @@ def trace_back_path(target_node: GameNode) -> Tuple[List[str], List[GameNode]]:
 
 
 def compute_manhattan_cost(node: GameNode) -> int:
+    """
+    Calculates Manhattan distance heuristic (h(n)) for A* search.
+    For each tile, computes the sum of horizontal and vertical distances
+    from its current position to its goal position.
+    This is an admissible heuristic (never overestimates the cost).
+    """
     total_cost = 0
     for idx, tile in enumerate(node.config):
         if tile != 0:
@@ -181,6 +303,12 @@ def compute_manhattan_cost(node: GameNode) -> int:
 
 
 def compute_euclidean_cost(node: GameNode) -> float:
+    """
+    Calculates Euclidean distance heuristic (h(n)) for A* search.
+    For each tile, computes the straight-line distance from its current
+    position to its goal position using the Pythagorean theorem.
+    This is also an admissible heuristic.
+    """
     total_cost = 0.0
     for idx, tile in enumerate(node.config):
         if tile != 0:
@@ -191,9 +319,19 @@ def compute_euclidean_cost(node: GameNode) -> float:
 
 
 def breadth_first_strategy(start_node: GameNode) -> AlgorithmStats:
+    """
+    Breadth-First Search (BFS) - Uninformed search algorithm.
+    
+    Strategy: Explores nodes level by level using a queue (FIFO).
+    Guarantees: Finds the shortest path (optimal for uniform cost).
+    Completeness: Complete if solution exists.
+    Time Complexity: O(b^d) where b=branching factor, d=depth
+    Space Complexity: O(b^d) - stores all nodes at current level
+    """
     stats = AlgorithmStats("BFS (Breadth-First Search)")
     stats.time_start = time.time()
 
+    # Quick check: If start state is already the goal, return immediately
     if start_node.reached_target():
         stats.found_solution = True
         stats.time_end = time.time()
@@ -201,20 +339,24 @@ def breadth_first_strategy(start_node: GameNode) -> AlgorithmStats:
         stats.node_sequence = [start_node]
         return stats
 
-    frontier = deque([start_node])
-    explored: Set[GameNode] = {start_node}
+    # Initialize frontier (FIFO queue) and explored set (visited tracking)
+    frontier = deque([start_node])        # Queue for BFS level-by-level expansion
+    explored: Set[GameNode] = {start_node}  # Track visited states to avoid cycles
 
+    # Main BFS loop: process nodes level by level
     while frontier:
-        current_node = frontier.popleft()
-        stats.visited_count += 1
-        stats.max_depth = max(stats.max_depth, current_node.level)
+        current_node = frontier.popleft()  # Get next node from front of queue
+        stats.visited_count += 1            # Increment expanded nodes counter
+        stats.max_depth = max(stats.max_depth, current_node.level)  # Track depth
 
+        # Generate and process all valid successor states
         for successor in current_node.generate_successors():
             if successor in explored:
-                continue
+                continue  # Skip already visited states
 
-            explored.add(successor)
+            explored.add(successor)  # Mark as visited
 
+            # Goal test: if we found the solution
             if successor.reached_target():
                 stats.solution_cost = successor.level
                 stats.max_depth = max(stats.max_depth, successor.level)
@@ -223,37 +365,54 @@ def breadth_first_strategy(start_node: GameNode) -> AlgorithmStats:
                 stats.time_end = time.time()
                 return stats
 
+            # Add to queue for later exploration
             frontier.append(successor)
 
+    # No solution found after exploring all reachable states
     stats.time_end = time.time()
     return stats
 
 
 def depth_first_strategy(start_node: GameNode, depth_cap: int = 50) -> AlgorithmStats:
+    """
+    Depth-First Search (DFS) - Uninformed search algorithm.
+    
+    Strategy: Explores as deep as possible before backtracking (uses stack/recursion).
+    Guarantees: Does NOT guarantee optimal solution.
+    Completeness: Complete only with depth limit (to avoid infinite loops).
+    Time Complexity: O(b^m) where m=maximum depth
+    Space Complexity: O(bm) - only stores path from root to current node
+    """
     stats = AlgorithmStats("DFS (Depth-First Search)")
     stats.time_start = time.time()
     explored: Set[GameNode] = set()
 
     def explore_depth(node: GameNode) -> Optional[GameNode]:
+        """Recursive DFS helper with depth limit and cycle detection."""
+        # Prune if already explored or exceeded depth limit
         if node in explored or node.level > depth_cap:
             return None
 
-        explored.add(node)
+        explored.add(node)  # Mark as visited
         stats.visited_count += 1
         stats.max_depth = max(stats.max_depth, node.level)
 
+        # Goal test at current node
         if node.reached_target():
             return node
 
+        # Recursively explore each successor (go deep first)
         for successor in node.generate_successors():
             outcome = explore_depth(successor)
             if outcome is not None:
-                return outcome
+                return outcome  # Solution found in this branch
 
-        return None
+        return None  # No solution in this branch
 
+    # Start the recursive DFS exploration
     solution_node = explore_depth(start_node)
 
+    # Build solution path if goal was found
     if solution_node is not None:
         stats.solution_cost = solution_node.level
         stats.found_solution = True
@@ -264,6 +423,15 @@ def depth_first_strategy(start_node: GameNode, depth_cap: int = 50) -> Algorithm
 
 
 def iterative_depth_strategy(start_node: GameNode, max_limit: int = 50) -> AlgorithmStats:
+    """
+    Iterative Deepening Depth-First Search (IDDFS).
+    
+    Strategy: Repeatedly performs DFS with increasing depth limits (0, 1, 2, ...).
+    Combines benefits of BFS (optimal, complete) and DFS (memory efficient).
+    Guarantees: Finds optimal solution like BFS.
+    Time Complexity: O(b^d) - similar to BFS despite repeated work
+    Space Complexity: O(bd) - memory efficient like DFS
+    """
     stats = AlgorithmStats("Iterative Deepening DFS")
     stats.time_start = time.time()
 
@@ -285,24 +453,45 @@ def iterative_depth_strategy(start_node: GameNode, max_limit: int = 50) -> Algor
 
         return None
 
+    # Incrementally increase depth limit from 0 to max_limit
+    # Each iteration runs a complete DFS up to that depth
     for current_limit in range(max_limit + 1):
         solution_node = depth_limited_search(start_node, current_limit, set())
         if solution_node is not None:
+            # Solution found at this depth limit
             stats.solution_cost = solution_node.level
             stats.found_solution = True
             stats.action_sequence, stats.node_sequence = trace_back_path(solution_node)
             stats.time_end = time.time()
             return stats
 
+    # No solution found within max depth limit
     stats.time_end = time.time()
     return stats
 
 
 def informed_search_strategy(start_node: GameNode, cost_function: Callable[[GameNode], float], 
                              function_label: str) -> AlgorithmStats:
+    """
+    A* Search - Informed search algorithm using heuristics.
+    
+    Strategy: Uses f(n) = g(n) + h(n) where:
+              g(n) = actual cost from start to node n
+              h(n) = estimated cost from node n to goal (heuristic)
+    Uses a priority queue to always expand the most promising node.
+    
+    Guarantees: Optimal if heuristic is admissible (never overestimates).
+    Completeness: Complete if solution exists.
+    Time/Space Complexity: Depends on heuristic quality, can be exponential.
+    
+    Common heuristics:
+    - Manhattan Distance: Sum of horizontal + vertical distances
+    - Euclidean Distance: Straight-line distance
+    """
     stats = AlgorithmStats(f"A* Search ({function_label})")
     stats.time_start = time.time()
 
+    # Quick check: if start is already goal
     if start_node.reached_target():
         stats.found_solution = True
         stats.time_end = time.time()
@@ -310,19 +499,24 @@ def informed_search_strategy(start_node: GameNode, cost_function: Callable[[Game
         stats.node_sequence = [start_node]
         return stats
 
+    # Priority queue stores (f_score, g_score, node) where f = g + h
+    # Always expands node with lowest f-value first
     priority_queue: List[Tuple[float, int, GameNode]] = [(cost_function(start_node), 0, start_node)]
-    explored: Set[GameNode] = set()
+    explored: Set[GameNode] = set()  # Track visited states to avoid cycles
 
+    # Main A* loop: always expand the node with lowest f(n) = g(n) + h(n)
     while priority_queue:
-        f_score, g_score, current_node = heapq.heappop(priority_queue)
+        f_score, g_score, current_node = heapq.heappop(priority_queue)  # Get best node
 
+        # Skip if already expanded (can have duplicates in heap)
         if current_node in explored:
             continue
 
-        explored.add(current_node)
+        explored.add(current_node)  # Mark as expanded
         stats.visited_count += 1
         stats.max_depth = max(stats.max_depth, current_node.level)
 
+        # Goal test: check if we reached the target
         if current_node.reached_target():
             stats.solution_cost = current_node.level
             stats.found_solution = True
@@ -330,19 +524,26 @@ def informed_search_strategy(start_node: GameNode, cost_function: Callable[[Game
             stats.time_end = time.time()
             return stats
 
+        # Generate successors and add to priority queue with f-values
         for successor in current_node.generate_successors():
             if successor in explored:
                 continue
-            g_val = successor.level
-            h_val = cost_function(successor)
-            heapq.heappush(priority_queue, (g_val + h_val, g_val, successor))
+            g_val = successor.level              # g(n): actual cost from start
+            h_val = cost_function(successor)     # h(n): heuristic estimate to goal
+            heapq.heappush(priority_queue, (g_val + h_val, g_val, successor))  # f = g + h
 
+    # No solution found (priority queue exhausted)
     stats.time_end = time.time()
     return stats
 
 
 def count_inversions(config: ConfigTuple) -> int:
-    filtered = [x for x in config if x != 0]
+    """
+    Counts the number of inversions in the puzzle configuration.
+    An inversion occurs when a larger tile appears before a smaller tile.
+    Used to determine if a puzzle configuration is solvable.
+    """
+    filtered = [x for x in config if x != 0]  # Exclude the blank tile
     inv_count = 0
     for i in range(len(filtered)):
         for j in range(i + 1, len(filtered)):
@@ -352,6 +553,11 @@ def count_inversions(config: ConfigTuple) -> int:
 
 
 def check_solvability(config: ConfigTuple) -> bool:
+    """
+    Determines if a puzzle configuration is solvable.
+    For 8-puzzle, a configuration is solvable if and only if
+    the number of inversions is even.
+    """
     return count_inversions(config) % 2 == 0
 
 
@@ -368,8 +574,25 @@ def parse_input_string(input_str: str) -> ConfigTuple:
 
 
 def execute_algorithm(start_node: GameNode, algorithm_choice: str) -> Dict[str, AlgorithmStats]:
+    """
+    Main algorithm dispatcher - executes selected search algorithm(s).
+    
+    Args:
+        start_node: Initial puzzle state to solve from
+        algorithm_choice: String key selecting algorithm:
+            'bfs' - Breadth-First Search
+            'dfs' - Depth-First Search
+            'iddfs' - Iterative Deepening DFS
+            'astar-m' - A* with Manhattan distance heuristic
+            'astar-e' - A* with Euclidean distance heuristic
+            'all' - Run all algorithms for comparison
+    
+    Returns:
+        Dictionary mapping algorithm display names to their AlgorithmStats results
+    """
     algorithm_choice = algorithm_choice.strip().lower()
 
+    # Map algorithm keys to their execution functions
     algo_mapping: Dict[str, Callable[[], AlgorithmStats]] = {
         "bfs": lambda: breadth_first_strategy(start_node),
         "dfs": lambda: depth_first_strategy(start_node),
@@ -378,6 +601,7 @@ def execute_algorithm(start_node: GameNode, algorithm_choice: str) -> Dict[str, 
         "astar-e": lambda: informed_search_strategy(start_node, compute_euclidean_cost, "Euclidean Distance"),
     }
 
+    # Special case: run all algorithms for comparison
     if algorithm_choice == "all":
         return {
             "BFS": algo_mapping["bfs"](),
@@ -469,6 +693,32 @@ def format_tree_visualization(stats: AlgorithmStats) -> str:
     tree_lines.append(f"Path Length: {len(stats.action_sequence) - 1} moves")
     return "\n".join(tree_lines)
 
+
+# ============================================================================
+# GUI SECTION
+# ============================================================================
+# This section contains the complete graphical user interface using Tkinter.
+#
+# MAIN GUI CLASS:
+#   - PuzzleSolverInterface: Complete interactive puzzle solver application
+#
+# FEATURES:
+#   - 3x3 grid input for board configuration
+#   - Preset puzzle buttons (Easy, Medium, Hard, Goal, Clear)
+#   - Algorithm selection dropdown (BFS, DFS, IDDFS, A* variants, Run All)
+#   - Results panel showing algorithm performance metrics
+#   - Solution tree visualization panel
+#   - Step-by-step visualization canvas with Prev/Play/Next controls
+#   - Real-time status updates
+#   - Scrollable interface for smaller screens
+#   - Modern clean UI with custom color scheme
+#
+# The GUI provides a user-friendly way to:
+#   1. Input puzzle configurations
+#   2. Run search algorithms
+#   3. Compare algorithm performance
+#   4. Visualize solution paths step-by-step
+# ============================================================================
 
 class PuzzleSolverInterface:
     
@@ -802,11 +1052,18 @@ class PuzzleSolverInterface:
 
 
 def execute_main() -> None:
+    """Main entry point - creates and launches the GUI application."""
     application = PuzzleSolverInterface()
     application.start()
 
 
-# Compatibility aliases for existing tests
+# ============================================================================
+# COMPATIBILITY ALIASES
+# ============================================================================
+# These aliases provide backward compatibility with different naming conventions
+# and enable the code to work with existing tests and external code that might
+# use alternative names for classes and functions.
+# ============================================================================
 PuzzleState = GameNode
 SearchMetrics = AlgorithmStats
 bfs_search = breadth_first_strategy
