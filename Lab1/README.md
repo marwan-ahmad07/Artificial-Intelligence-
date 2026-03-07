@@ -1,9 +1,5 @@
 # 8-Puzzle Solver - Assignment 1
 
-**Student:** Marwan Ahmed  
-**Course:** Artificial Intelligence - Term 8  
-**Assignment:** Assignment 1
-
 ## Overview
 
 This project implements a comprehensive 8-puzzle solver using multiple AI search algorithms. The 8-puzzle is a sliding puzzle that consists of a 3×3 grid with 8 numbered tiles and one blank space. The goal is to rearrange the tiles from a random initial configuration to reach the goal state.
