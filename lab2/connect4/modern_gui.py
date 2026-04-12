@@ -76,7 +76,7 @@ class Connect4App:
 
         self.evaluator = HeuristicEvaluator()
         self.ai = Connect4AI(self.evaluator)
-        self.tree_printer = TreePrinter(enabled=True)
+        self.tree_printer = TreePrinter(enabled=True, max_depth=3)
 
         self.board = Connect4Board()
         self.game_active = False

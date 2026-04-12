@@ -33,47 +33,44 @@ class HeuristicEvaluator:
         self.weights = weights or HeuristicWeights()
 
     def evaluate(self, board: Connect4Board) -> int:
-        """Return a signed score for the current board."""
+        """Return a signed score for the current board.
 
-        ai_score = self._player_score(board, COMPUTER)
-        human_score = self._player_score(board, HUMAN)
-        return ai_score - human_score
+        The scoring is computed in a single window pass for efficiency while
+        preserving the same behavior as the previous implementation.
+        """
 
-    def _player_score(self, board: Connect4Board, player: int) -> int:
-        opponent = HUMAN if player == COMPUTER else COMPUTER
         score = 0
 
-        # Final connect-fours dominate the score because the assignment defines
-        # victory by the total number of completed four-in-a-row sequences.
-        score += board.count_sequences(player) * self.weights.connect4
-
         center_column = board.cols // 2
-        center_count = sum(1 for row in range(board.rows) if board.grid[row][center_column] == player)
-        score += center_count * self.weights.center_piece
+        ai_center_count = sum(1 for row in range(board.rows) if board.grid[row][center_column] == COMPUTER)
+        human_center_count = sum(1 for row in range(board.rows) if board.grid[row][center_column] == HUMAN)
+        score += (ai_center_count - human_center_count) * self.weights.center_piece
 
         for window in self._iter_windows(board):
-            score += self._evaluate_window(window, player, opponent)
+            score += self._window_delta(window)
 
         return score
 
-    def _evaluate_window(self, window: tuple[int, int, int, int], player: int, opponent: int) -> int:
-        player_count = window.count(player)
-        opponent_count = window.count(opponent)
-        empty_count = window.count(EMPTY)
+    def _window_delta(self, window: tuple[int, int, int, int]) -> int:
+        ai_count = window.count(COMPUTER)
+        human_count = window.count(HUMAN)
+        empty_count = 4 - ai_count - human_count
 
-        if player_count > 0 and opponent_count > 0:
+        if ai_count > 0 and human_count > 0:
             return 0
 
-        if player_count == 4:
-            return self.weights.connect4
-        if player_count == 3 and empty_count == 1:
-            return self.weights.open_three
-        if player_count == 2 and empty_count == 2:
-            return self.weights.open_two
-        if opponent_count == 3 and empty_count == 1:
-            return -self.weights.open_three
-        if opponent_count == 2 and empty_count == 2:
-            return -self.weights.open_two
+        if ai_count == 4:
+            return 2 * self.weights.connect4
+        if human_count == 4:
+            return -2 * self.weights.connect4
+        if ai_count == 3 and empty_count == 1:
+            return 2 * self.weights.open_three
+        if human_count == 3 and empty_count == 1:
+            return -2 * self.weights.open_three
+        if ai_count == 2 and empty_count == 2:
+            return 2 * self.weights.open_two
+        if human_count == 2 and empty_count == 2:
+            return -2 * self.weights.open_two
 
         return 0
 

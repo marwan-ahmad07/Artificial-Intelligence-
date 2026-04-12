@@ -46,7 +46,8 @@ class Connect4AI:
 
         stats = SearchStats(algorithm=normalized_algorithm, depth=depth)
         stats.start()
-        tree_printer = printer or TreePrinter(enabled=True)
+        tree_printer = printer or TreePrinter(enabled=True, max_depth=3)
+        tree_printer.reset()
         tree_printer.banner(
             f"AI search start | algorithm={normalized_algorithm} | depth={depth} | nodes=0"
         )

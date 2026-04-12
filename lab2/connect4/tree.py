@@ -34,23 +34,47 @@ class SearchStats:
 class TreePrinter:
     """Pretty-print a recursive minimax tree in the terminal."""
 
-    def __init__(self, enabled: bool = True) -> None:
+    def __init__(self, enabled: bool = True, max_depth: int | None = 3) -> None:
         self.enabled = enabled
+        self.max_depth = max_depth
+        self._truncation_announced = False
+
+    def reset(self) -> None:
+        """Reset per-search state used by compact logging."""
+
+        self._truncation_announced = False
+
+    def _depth_allowed(self, depth: int) -> bool:
+        if self.max_depth is None:
+            return True
+
+        if depth <= self.max_depth:
+            return True
+
+        if not self._truncation_announced:
+            indent = "  " * self.max_depth
+            print(f"{indent}... deeper levels hidden (set TreePrinter.max_depth=None for full trace)")
+            self._truncation_announced = True
+        return False
 
     def banner(self, title: str) -> None:
         if not self.enabled:
             return
-        line = "=" * 92
-        print(f"\n{line}\n{title}\n{line}")
+        line = "-" * 76
+        print(f"\n{line}\n[SEARCH] {title}\n{line}")
 
     def node(self, depth: int, label: str, message: str) -> None:
         if not self.enabled:
             return
+        if not self._depth_allowed(depth):
+            return
         indent = "  " * depth
-        print(f"{indent}{label}: {message}")
+        print(f"{indent}{label:<12} {message}")
 
     def branch(self, depth: int, message: str) -> None:
         if not self.enabled:
             return
+        if not self._depth_allowed(depth):
+            return
         indent = "  " * depth
-        print(f"{indent}- {message}")
+        print(f"{indent}-> {message}")
