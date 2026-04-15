@@ -14,7 +14,7 @@ from typing import Callable
 from connect4.ai import Connect4AI
 from connect4.board import COMPUTER, HUMAN, Connect4Board
 from connect4.heuristics import HeuristicEvaluator
-from connect4.tree import SearchStats, TreePrinter
+from connect4.tree import SearchStats, TraceEvent, TreePrinter
 
 
 @dataclass(slots=True)
@@ -87,6 +87,8 @@ class Connect4App:
         self.turn_value = StringVar(value="Waiting to start")
         self.stats_value = StringVar(value="No moves yet")
         self.result_value = StringVar(value="")
+        self.score_value = StringVar(value="Connect-fours: Human 0 | Computer 0")
+        self.ai_score_value = StringVar(value="AI selected score: -")
 
         self.animating = False
         self.hover_column: int | None = None
@@ -107,10 +109,13 @@ class Connect4App:
         self.scrollbar: ttk.Scrollbar | None = None
         self.content_frame: ttk.Frame | None = None
         self.canvas: Canvas | None = None
+        self.tree_view: ttk.Treeview | None = None
         self.layout = BoardLayout(1, 1, 0, 0, 0, 0, 1, 4, 6, 8)
 
         self._configure_styles()
         self._build_layout()
+        self._set_tree_lines(["Search tree output will appear after the computer moves."])
+        self._update_score_display()
         self.root.after_idle(self._redraw_scene)
 
     def run(self) -> None:
@@ -133,6 +138,19 @@ class Connect4App:
         style.configure("Root.TFrame", background=self.colors.background)
         style.configure("Card.TFrame", background=self.colors.surface)
         style.configure("CardAlt.TFrame", background=self.colors.surface_alt)
+        style.configure(
+            "Search.Treeview",
+            background="#f8fbff",
+            fieldbackground="#f8fbff",
+            foreground=self.colors.text,
+            rowheight=22,
+            font=("Consolas", 9),
+        )
+        style.map(
+            "Search.Treeview",
+            background=[("selected", "#dfeaf8")],
+            foreground=[("selected", self.colors.text)],
+        )
         style.configure("ResultNeutral.TFrame", background=self.colors.surface)
         style.configure("ResultSuccess.TFrame", background=self.colors.success)
         style.configure("ResultWarning.TFrame", background=self.colors.warning)
@@ -472,6 +490,7 @@ class Connect4App:
         footer.grid(row=3, column=0, sticky="ew")
         footer.columnconfigure(0, weight=1)
         footer.columnconfigure(1, weight=1)
+        footer.rowconfigure(4, weight=1)
 
         self.result_panel = ttk.Frame(footer, style="ResultNeutral.TFrame", padding=0)
         self.result_panel.grid(row=0, column=0, columnspan=2, sticky="ew")
@@ -499,39 +518,58 @@ class Connect4App:
             sticky="w",
         )
 
-    def start_game(self) -> None:
-        """Validate settings and start a new game session."""
+        score_panel = ttk.Frame(footer, style="CardAlt.TFrame", padding=14)
+        score_panel.grid(row=3, column=0, sticky="nsew", pady=(14, 0), padx=(0, 8))
+        score_panel.columnconfigure(0, weight=1)
+        ttk.Label(score_panel, text="Scoreboard", style="Section.TLabel").grid(row=0, column=0, sticky="w")
+        ttk.Label(
+            score_panel,
+            text="Live connect-four counts and the heuristic score for the current board.",
+            style="Muted.TLabel",
+            wraplength=450,
+        ).grid(row=1, column=0, sticky="w", pady=(4, 10))
+        ttk.Label(score_panel, textvariable=self.score_value, style="Metric.TLabel", wraplength=450).grid(
+            row=2,
+            column=0,
+            sticky="w",
+        )
+        ttk.Label(score_panel, textvariable=self.ai_score_value, style="Metric.TLabel", wraplength=450).grid(
+            row=3,
+            column=0,
+            sticky="w",
+            pady=(6, 0),
+        )
 
-        try:
-            depth = int(self.depth_value.get())
-        except ValueError:
-            messagebox.showerror("Invalid depth", "Please enter a whole number for depth K.")
-            return
+        tree_panel = ttk.Frame(footer, style="CardAlt.TFrame", padding=14)
+        tree_panel.grid(row=3, column=1, rowspan=2, sticky="nsew", pady=(14, 0), padx=(8, 0))
+        tree_panel.columnconfigure(0, weight=1)
+        tree_panel.rowconfigure(2, weight=1)
+        ttk.Label(tree_panel, text="Search Tree", style="Section.TLabel").grid(row=0, column=0, sticky="w")
+        ttk.Label(
+            tree_panel,
+            text="Depth-limited AI trace for the latest computer move.",
+            style="Muted.TLabel",
+        ).grid(row=1, column=0, sticky="w", pady=(4, 8))
 
-        if depth < 1:
-            messagebox.showerror("Invalid depth", "Depth K must be at least 1.")
-            return
+        tree_text_row = ttk.Frame(tree_panel, style="CardAlt.TFrame")
+        tree_text_row.grid(row=2, column=0, sticky="nsew")
+        tree_text_row.columnconfigure(0, weight=1)
+        tree_text_row.rowconfigure(0, weight=1)
 
-        self.board = Connect4Board()
-        self.game_active = True
-        self.current_player = HUMAN
-        self.animating = False
-        self.hover_column = None
-        self.winner_player = 0
-        self.result_value.set("")
-        self.status_value.set("Game started. Human begins.")
-        self.turn_value.set("Current player: Human")
-        self.stats_value.set("Last move: none")
-        self._set_result_style("neutral")
-        self._set_turn_badge()
-        self._set_settings_enabled(False)
-        self._redraw_scene()
-        self._ensure_canvas_visible()
+        self.tree_view = ttk.Treeview(
+            tree_text_row,
+            show="tree",
+            selectmode="browse",
+            height=14,
+            style="Search.Treeview",
+        )
+        self.tree_view.grid(row=0, column=0, sticky="nsew")
 
-    def restart_game(self) -> None:
-        """Restart with the current settings."""
-
-        self.start_game()
+        tree_scroll = ttk.Scrollbar(tree_text_row, orient="vertical", command=self.tree_view.yview)
+        tree_scroll.grid(row=0, column=1, sticky="ns")
+        tree_scroll_x = ttk.Scrollbar(tree_text_row, orient="horizontal", command=self.tree_view.xview)
+        tree_scroll_x.grid(row=1, column=0, sticky="ew")
+        self.tree_view.configure(yscrollcommand=tree_scroll.set, xscrollcommand=tree_scroll_x.set)
 
     def _set_settings_enabled(self, enabled: bool) -> None:
         state = "normal" if enabled else "disabled"
@@ -569,6 +607,117 @@ class Connect4App:
 
         self.result_panel.configure(style=panel_style)
         self.result_label.configure(style=label_style)
+
+    def _set_tree_lines(self, lines: list[str]) -> None:
+        if self.tree_view is None:
+            return
+
+        self.tree_view.delete(*self.tree_view.get_children())
+
+        if not lines:
+            self.tree_view.insert("", "end", text="No tree generated for this turn.")
+            return
+
+        parents_by_depth: dict[int, str] = {-1: ""}
+        for raw_line in lines:
+            line = raw_line.rstrip("\n")
+            if not line.strip():
+                continue
+
+            stripped = line.strip()
+            if stripped and all(char == "-" for char in stripped):
+                continue
+
+            depth = self._trace_depth(line)
+            parent = parents_by_depth.get(depth - 1, "")
+            node_text = stripped
+            node_id = self.tree_view.insert(parent, "end", text=node_text)
+            parents_by_depth[depth] = node_id
+
+            for existing_depth in list(parents_by_depth):
+                if existing_depth > depth:
+                    del parents_by_depth[existing_depth]
+
+        for root_child in self.tree_view.get_children():
+            self._expand_tree(root_child)
+
+    def _set_tree_events(self, events: list[TraceEvent]) -> None:
+        if self.tree_view is None:
+            return
+
+        self.tree_view.delete(*self.tree_view.get_children())
+        if not events:
+            self.tree_view.insert("", "end", text="No tree generated for this turn.")
+            return
+
+        parents_by_depth: dict[int, str] = {-1: ""}
+        for event in events:
+            if event.kind == "banner":
+                node_id = self.tree_view.insert("", "end", text=f"[SEARCH] {event.text}")
+                parents_by_depth = {-1: "", 0: node_id}
+                continue
+
+            parent = parents_by_depth.get(event.depth - 1, "")
+            prefix = self._event_prefix(event.kind)
+            node_text = f"{prefix}{event.text}"
+            node_id = self.tree_view.insert(parent, "end", text=node_text)
+            parents_by_depth[event.depth] = node_id
+
+            if event.kind == "block" and event.lines:
+                for detail_line in event.lines:
+                    self.tree_view.insert(node_id, "end", text=detail_line)
+
+            for existing_depth in list(parents_by_depth):
+                if existing_depth > event.depth:
+                    del parents_by_depth[existing_depth]
+
+        for root_child in self.tree_view.get_children():
+            self._expand_tree(root_child)
+
+    def _event_prefix(self, kind: str) -> str:
+        if kind == "node":
+            return "Node | "
+        if kind == "branch":
+            return "Branch | "
+        if kind == "block":
+            return "Board | "
+        if kind == "truncated":
+            return "Info | "
+        return ""
+
+    def _trace_depth(self, line: str) -> int:
+        leading_spaces = len(line) - len(line.lstrip(" "))
+        return max(0, leading_spaces // 2)
+
+    def _expand_tree(self, item_id: str) -> None:
+        if self.tree_view is None:
+            return
+
+        self.tree_view.item(item_id, open=True)
+        for child in self.tree_view.get_children(item_id):
+            self._expand_tree(child)
+
+    def _update_score_display(
+        self,
+        ai_selected_score: float | None = None,
+        reset_ai_score: bool = False,
+    ) -> None:
+        human_sequences = self.board.count_sequences(HUMAN)
+        computer_sequences = self.board.count_sequences(COMPUTER)
+        heuristic_score = self.evaluator.evaluate(self.board)
+
+        self.score_value.set(
+            "Connect-fours: Human {human} | Computer {computer} | Heuristic(board): {heuristic}".format(
+                human=human_sequences,
+                computer=computer_sequences,
+                heuristic=heuristic_score,
+            )
+        )
+
+        if ai_selected_score is not None:
+            self.ai_score_value.set(f"AI selected score: {ai_selected_score:.2f}")
+        elif reset_ai_score:
+            self.ai_score_value.set("AI selected score: -")
 
     def _on_canvas_resize(self, event) -> None:  # type: ignore[no-untyped-def]
         self.canvas_width = max(event.width, 1)
@@ -894,10 +1043,13 @@ class Connect4App:
         self.status_value.set("Game started. Human begins.")
         self.turn_value.set("Current player: Human")
         self.stats_value.set("Last move: none")
+        self._set_tree_lines(["Search tree output will appear after the computer moves."])
+        self._update_score_display(reset_ai_score=True)
         self._set_result_style("neutral")
         self._set_turn_badge()
         self._set_settings_enabled(False)
         self._redraw_scene()
+        self._ensure_canvas_visible()
 
     def restart_game(self) -> None:
         """Restart with the current settings."""
@@ -924,7 +1076,7 @@ class Connect4App:
 
     def _after_human_move(self, row: int, column: int) -> None:
         self.animating = False
-        self._register_move(row=row, column=column, player=HUMAN, elapsed_ms=0.0, nodes=0, label="Human")
+        self._register_move(row=row, column=column, elapsed_ms=0.0, nodes=0, label="Human")
 
         if self._finish_if_board_full():
             return
@@ -943,9 +1095,14 @@ class Connect4App:
         depth = int(self.depth_value.get())
         algorithm = self.selected_algorithm.get()
         search_board = self.board.clone()
+        gui_tree_printer = TreePrinter(
+            enabled=True,
+            max_depth=self.tree_printer.max_depth,
+            sinks=[print],
+        )
 
         try:
-            best_column, stats = self.ai.choose_move(search_board, depth, algorithm, self.tree_printer)
+            best_column, stats = self.ai.choose_move(search_board, depth, algorithm, gui_tree_printer)
         except Exception as exc:
             messagebox.showerror("AI error", str(exc))
             self.game_active = False
@@ -953,6 +1110,9 @@ class Connect4App:
             self._set_settings_enabled(True)
             self._set_turn_badge()
             return
+
+        self._set_tree_events(gui_tree_printer.events)
+        self._update_score_display(ai_selected_score=stats.selected_score)
 
         if not self.board.is_valid_column(best_column):
             valid_columns = self.board.valid_columns()
@@ -976,7 +1136,6 @@ class Connect4App:
         self._register_move(
             row=row,
             column=column,
-            player=COMPUTER,
             elapsed_ms=stats.elapsed_milliseconds,
             nodes=stats.nodes_expanded,
             label=f"Computer ({stats.algorithm})",
@@ -994,7 +1153,6 @@ class Connect4App:
         self,
         row: int,
         column: int,
-        player: int,
         elapsed_ms: float,
         nodes: int,
         label: str,
@@ -1002,6 +1160,7 @@ class Connect4App:
         self.stats_value.set(
             f"Last move: {label} | column {column + 1} | row {row + 1} | time {elapsed_ms:.2f} ms | nodes {nodes}"
         )
+        self._update_score_display()
         self._redraw_scene()
 
     def _finish_if_board_full(self) -> bool:
@@ -1039,6 +1198,7 @@ class Connect4App:
         self.turn_value.set("Game over")
         self._set_turn_badge()
         self._set_result_style(result_mode)
+        self._update_score_display()
         self._redraw_scene()
 
     def _animate_drop(self, column: int, player: int, on_complete: Callable[[int, int], None]) -> None:

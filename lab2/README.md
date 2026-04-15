@@ -6,7 +6,13 @@ Run the game with:
 python main.py
 ```
 
-The GUI supports three AI modes, configurable depth, restart, move timing, node counting, and console minimax tracing.
+The GUI supports three AI modes, configurable depth, restart, move timing, node counting, and readable search-tree tracing.
+
+## GUI visibility improvements
+
+- A **Scoreboard** panel now shows live human/computer connect-four counts and the heuristic board score.
+- A **Search Tree** panel now shows a depth-limited AI trace for the most recent computer move.
+- The same tree trace is still printed to the terminal for debugging.
 
 ## Console trace readability
 

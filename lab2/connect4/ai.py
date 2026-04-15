@@ -65,6 +65,8 @@ class Connect4AI:
         )
 
         stats.stop()
+        stats.selected_column = result.column
+        stats.selected_score = result.score
         tree_printer.banner(
             "AI search end | move={move} | score={score:.2f} | nodes={nodes} | time={time:.2f} ms".format(
                 move=result.column,
@@ -100,7 +102,8 @@ class Connect4AI:
 
         if depth == 0 or board.is_full():
             score = float(self.evaluator.evaluate(board))
-            printer.node(indent, "LEAF", f"depth={depth} score={score:.2f}")
+            printer.node(indent, "LEAF", f"depth={depth} heuristic={score:.2f}")
+            printer.block(indent + 1, "BOARD VALUES", self._board_value_lines(board))
             return SearchResult(column=None, score=score)
 
         if maximizing:
@@ -325,3 +328,10 @@ class Connect4AI:
         return candidate_distance < current_distance or (
             candidate_distance == current_distance and candidate < current
         )
+
+    def _board_value_lines(self, board: Connect4Board) -> list[str]:
+        """Return a readable matrix of board values for tree output."""
+
+        header = " ".join(f"c{col}" for col in range(board.cols))
+        rows = [f"r{row}: " + "  ".join(str(cell) for cell in board.grid[row]) for row in range(board.rows)]
+        return [header, *rows]
