@@ -39,26 +39,32 @@ class HeuristicEvaluator:
         preserving the same behavior as the previous implementation.
         """
 
+        # Final score seen by minimax/expectimax for this board state.
         score = 0
 
+        # Center control bonus: central cells are strategically stronger in Connect 4.
         center_column = board.cols // 2
         ai_center_count = sum(1 for row in range(board.rows) if board.grid[row][center_column] == COMPUTER)
         human_center_count = sum(1 for row in range(board.rows) if board.grid[row][center_column] == HUMAN)
         score += (ai_center_count - human_center_count) * self.weights.center_piece
 
+        # Add contributions from every 4-cell window (horizontal, vertical, diagonals).
         for window in self._iter_windows(board):
             score += self._window_delta(window)
 
         return score
 
     def _window_delta(self, window: tuple[int, int, int, int]) -> int:
+        # Count how many cells in this window belong to each side.
         ai_count = window.count(COMPUTER)
         human_count = window.count(HUMAN)
         empty_count = 4 - ai_count - human_count
 
+        # Mixed windows (both players present) cannot become a direct 4-in-a-row threat.
         if ai_count > 0 and human_count > 0:
             return 0
 
+        # Stronger patterns receive larger absolute weights.
         if ai_count == 4:
             return 2 * self.weights.connect4
         if human_count == 4:
@@ -72,11 +78,13 @@ class HeuristicEvaluator:
         if human_count == 2 and empty_count == 2:
             return -2 * self.weights.open_two
 
+        # Any other pattern is neutral in this heuristic.
         return 0
 
     def _iter_windows(self, board: Connect4Board):
         """Yield every four-cell window on the board as a tuple of values."""
 
+        # Horizontal windows.
         for row in range(board.rows):
             for col in range(board.cols - 3):
                 yield (
@@ -86,6 +94,7 @@ class HeuristicEvaluator:
                     board.grid[row][col + 3],
                 )
 
+        # Vertical windows.
         for row in range(board.rows - 3):
             for col in range(board.cols):
                 yield (
@@ -95,6 +104,7 @@ class HeuristicEvaluator:
                     board.grid[row + 3][col],
                 )
 
+        # Diagonal windows (top-left to bottom-right).
         for row in range(board.rows - 3):
             for col in range(board.cols - 3):
                 yield (
@@ -104,6 +114,7 @@ class HeuristicEvaluator:
                     board.grid[row + 3][col + 3],
                 )
 
+        # Diagonal windows (bottom-left to top-right).
         for row in range(3, board.rows):
             for col in range(board.cols - 3):
                 yield (
