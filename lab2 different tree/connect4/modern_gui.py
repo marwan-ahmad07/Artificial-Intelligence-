@@ -93,8 +93,6 @@ class Connect4App:
         self.animating = False
         self.hover_column: int | None = None
         self.winner_player = 0
-        self.game_session = 0
-        self._scheduled_tasks: set[str] = set()
         self.canvas_width = 1
         self.canvas_height = 1
         self.drop_animation_steps = 18
@@ -111,7 +109,7 @@ class Connect4App:
         self.scrollbar: ttk.Scrollbar | None = None
         self.content_frame: ttk.Frame | None = None
         self.canvas: Canvas | None = None
-        self.tree_canvas: Canvas | None = None
+        self.tree_view: ttk.Treeview | None = None
         self.layout = BoardLayout(1, 1, 0, 0, 0, 0, 1, 4, 6, 8)
 
         self._configure_styles()
@@ -558,22 +556,20 @@ class Connect4App:
         tree_text_row.columnconfigure(0, weight=1)
         tree_text_row.rowconfigure(0, weight=1)
 
-        self.tree_canvas = Canvas(
+        self.tree_view = ttk.Treeview(
             tree_text_row,
-            bg="#f8fbff",
-            highlightthickness=0,
-            bd=0,
-            relief="flat",
-            width=520,
-            height=320,
+            show="tree",
+            selectmode="browse",
+            height=14,
+            style="Search.Treeview",
         )
-        self.tree_canvas.grid(row=0, column=0, sticky="nsew")
+        self.tree_view.grid(row=0, column=0, sticky="nsew")
 
-        tree_scroll = ttk.Scrollbar(tree_text_row, orient="vertical", command=self.tree_canvas.yview)
+        tree_scroll = ttk.Scrollbar(tree_text_row, orient="vertical", command=self.tree_view.yview)
         tree_scroll.grid(row=0, column=1, sticky="ns")
-        tree_scroll_x = ttk.Scrollbar(tree_text_row, orient="horizontal", command=self.tree_canvas.xview)
+        tree_scroll_x = ttk.Scrollbar(tree_text_row, orient="horizontal", command=self.tree_view.xview)
         tree_scroll_x.grid(row=1, column=0, sticky="ew")
-        self.tree_canvas.configure(yscrollcommand=tree_scroll.set, xscrollcommand=tree_scroll_x.set)
+        self.tree_view.configure(yscrollcommand=tree_scroll.set, xscrollcommand=tree_scroll_x.set)
 
     def _set_settings_enabled(self, enabled: bool) -> None:
         state = "normal" if enabled else "disabled"
@@ -613,120 +609,70 @@ class Connect4App:
         self.result_label.configure(style=label_style)
 
     def _set_tree_lines(self, lines: list[str]) -> None:
-        if self.tree_canvas is None:
+        if self.tree_view is None:
             return
 
-        self.tree_canvas.delete("all")
+        self.tree_view.delete(*self.tree_view.get_children())
 
         if not lines:
-            self.tree_canvas.create_text(12, 12, anchor="nw", text="No tree generated for this turn.", fill=self.colors.text)
-            self.tree_canvas.configure(scrollregion=(0, 0, 600, 200))
+            self.tree_view.insert("", "end", text="No tree generated for this turn.")
             return
 
-        y = 16
-        for line in lines:
-            if line.strip():
-                self.tree_canvas.create_text(12, y, anchor="nw", text=line.strip(), fill=self.colors.text, font=("Consolas", 9))
-                y += 18
-        self.tree_canvas.configure(scrollregion=(0, 0, 900, max(220, y + 16)))
+        parents_by_depth: dict[int, str] = {-1: ""}
+        for raw_line in lines:
+            line = raw_line.rstrip("\n")
+            if not line.strip():
+                continue
+
+            stripped = line.strip()
+            if stripped and all(char == "-" for char in stripped):
+                continue
+
+            depth = self._trace_depth(line)
+            parent = parents_by_depth.get(depth - 1, "")
+            node_text = stripped
+            node_id = self.tree_view.insert(parent, "end", text=node_text)
+            parents_by_depth[depth] = node_id
+
+            for existing_depth in list(parents_by_depth):
+                if existing_depth > depth:
+                    del parents_by_depth[existing_depth]
+
+        for root_child in self.tree_view.get_children():
+            self._expand_tree(root_child)
 
     def _set_tree_events(self, events: list[TraceEvent]) -> None:
-        if self.tree_canvas is None:
+        if self.tree_view is None:
             return
 
-        self.tree_canvas.delete("all")
+        self.tree_view.delete(*self.tree_view.get_children())
         if not events:
-            self.tree_canvas.create_text(12, 12, anchor="nw", text="No tree generated for this turn.", fill=self.colors.text)
-            self.tree_canvas.configure(scrollregion=(0, 0, 600, 200))
+            self.tree_view.insert("", "end", text="No tree generated for this turn.")
             return
 
-        node_width = 350
-        depth_x_spacing = 240
-        row_y_spacing = 26
-        margin_x = 28
-        margin_y = 22
-
-        nodes: list[dict[str, int | str | None | list[str]]] = []
-        last_index_by_depth: dict[int, int] = {}
-
+        parents_by_depth: dict[int, str] = {-1: ""}
         for event in events:
-            text = event.text if event.kind == "banner" else f"{self._event_prefix(event.kind)}{event.text}"
-            line_count = 1 + (len(event.lines) if event.lines else 0)
-            height = max(30, 12 + line_count * 16)
-
             if event.kind == "banner":
-                parent_index = None
-                depth = 0
-                last_index_by_depth = {}
-            else:
-                depth = max(1, event.depth + 1)
-                parent_index = last_index_by_depth.get(depth - 1)
-
-            node_index = len(nodes)
-            nodes.append(
-                {
-                    "depth": depth,
-                    "text": text,
-                    "height": height,
-                    "parent": parent_index,
-                    "kind": event.kind,
-                    "lines": event.lines or [],
-                }
-            )
-            last_index_by_depth[depth] = node_index
-            for existing_depth in list(last_index_by_depth):
-                if existing_depth > depth:
-                    del last_index_by_depth[existing_depth]
-
-        y_cursor = margin_y
-        positions: list[tuple[int, int, int, int]] = []
-        for node in nodes:
-            depth = int(node["depth"])
-            height = int(node["height"])
-            x1 = margin_x + depth * depth_x_spacing
-            y1 = y_cursor
-            x2 = x1 + node_width
-            y2 = y1 + height
-            positions.append((x1, y1, x2, y2))
-            y_cursor = y2 + row_y_spacing
-
-        for index, node in enumerate(nodes):
-            parent_index = node["parent"]
-            if parent_index is None:
+                node_id = self.tree_view.insert("", "end", text=f"[SEARCH] {event.text}")
+                parents_by_depth = {-1: "", 0: node_id}
                 continue
-            px1, py1, px2, py2 = positions[int(parent_index)]
-            x1, y1, _, y2 = positions[index]
-            self.tree_canvas.create_line(
-                px2,
-                (py1 + py2) // 2,
-                x1 - 12,
-                (y1 + y2) // 2,
-                fill="#5f7083",
-                width=2,
-                smooth=True,
-            )
 
-        for index, node in enumerate(nodes):
-            x1, y1, x2, y2 = positions[index]
-            kind = str(node["kind"])
-            fill = self._tree_node_fill(kind)
-            outline = self._tree_node_outline(kind)
-            self.tree_canvas.create_rectangle(x1, y1, x2, y2, fill=fill, outline=outline, width=2)
-            self.tree_canvas.create_oval(x1 - 8, (y1 + y2) // 2 - 4, x1, (y1 + y2) // 2 + 4, fill=outline, outline=outline)
+            parent = parents_by_depth.get(event.depth - 1, "")
+            prefix = self._event_prefix(event.kind)
+            node_text = f"{prefix}{event.text}"
+            node_id = self.tree_view.insert(parent, "end", text=node_text)
+            parents_by_depth[event.depth] = node_id
 
-            body_lines = [str(node["text"])]
-            body_lines.extend(str(detail) for detail in node["lines"])
-            self.tree_canvas.create_text(
-                x1 + 10,
-                y1 + 8,
-                anchor="nw",
-                text="\n".join(body_lines),
-                fill=self.colors.text,
-                font=("Consolas", 9),
-                justify="left",
-            )
+            if event.kind in ("block", "pv_node") and event.lines:
+                for detail_line in event.lines:
+                    self.tree_view.insert(node_id, "end", text=detail_line)
 
-        self.tree_canvas.configure(scrollregion=(0, 0, margin_x + (self.tree_printer.max_depth or 8 + 2) * depth_x_spacing + node_width + 60, max(420, y_cursor + 20)))
+            for existing_depth in list(parents_by_depth):
+                if existing_depth > event.depth:
+                    del parents_by_depth[existing_depth]
+
+        for root_child in self.tree_view.get_children():
+            self._expand_tree(root_child)
 
     def _event_prefix(self, kind: str) -> str:
         if kind == "node":
@@ -737,33 +683,21 @@ class Connect4App:
             return "Board | "
         if kind == "truncated":
             return "Info | "
+        if kind == "pv_node":
+            return "PV | "
         return ""
 
-    def _tree_node_fill(self, kind: str) -> str:
-        if kind == "node":
-            return "#edf6ff"
-        if kind == "branch":
-            return "#f4fbef"
-        if kind == "block":
-            return "#fff8e9"
-        if kind == "banner":
-            return "#e9f0ff"
-        if kind == "truncated":
-            return "#fff3f3"
-        return "#f3f6fa"
+    def _trace_depth(self, line: str) -> int:
+        leading_spaces = len(line) - len(line.lstrip(" "))
+        return max(0, leading_spaces // 2)
 
-    def _tree_node_outline(self, kind: str) -> str:
-        if kind == "node":
-            return "#4d7aa8"
-        if kind == "branch":
-            return "#5f9c63"
-        if kind == "block":
-            return "#b2873c"
-        if kind == "banner":
-            return "#4b5f9f"
-        if kind == "truncated":
-            return "#b05a5a"
-        return "#6f7d8b"
+    def _expand_tree(self, item_id: str) -> None:
+        if self.tree_view is None:
+            return
+
+        self.tree_view.item(item_id, open=True)
+        for child in self.tree_view.get_children(item_id):
+            self._expand_tree(child)
 
     def _update_score_display(
         self,
@@ -1015,24 +949,6 @@ class Connect4App:
                     width=max(3, layout.cell_size // 16),
                 )
 
-    def _cancel_scheduled_tasks(self) -> None:
-        for task_id in list(self._scheduled_tasks):
-            try:
-                self.root.after_cancel(task_id)
-            except TclError:
-                pass
-        self._scheduled_tasks.clear()
-
-    def _schedule_once(self, delay_ms: int, callback: Callable[[], None]) -> None:
-        task_id = ""
-
-        def runner() -> None:
-            self._scheduled_tasks.discard(task_id)
-            callback()
-
-        task_id = self.root.after(delay_ms, runner)
-        self._scheduled_tasks.add(task_id)
-
     def _slot_bounds(self, layout: BoardLayout, row: int, col: int, inset: int | None = None) -> tuple[int, int, int, int]:
         actual_inset = layout.slot_inset if inset is None else inset
         x1 = layout.board_x + col * layout.cell_size + actual_inset
@@ -1119,8 +1035,6 @@ class Connect4App:
             messagebox.showerror("Invalid depth", "Depth K must be at least 1.")
             return
 
-        self._cancel_scheduled_tasks()
-        self.game_session += 1
         self.board = Connect4Board()
         self.game_active = True
         self.current_player = HUMAN
@@ -1174,13 +1088,9 @@ class Connect4App:
         self.status_value.set("Computer is thinking...")
         self._set_turn_badge()
         self._set_settings_enabled(False)
-        session = self.game_session
-        self._schedule_once(250, lambda: self._computer_turn(session))
+        self.root.after(250, self._computer_turn)
 
-    def _computer_turn(self, session: int | None = None) -> None:
-        if session is not None and session != self.game_session:
-            return
-
+    def _computer_turn(self) -> None:
         if not self.game_active:
             return
 
@@ -1217,12 +1127,10 @@ class Connect4App:
         self.turn_value.set("Animating computer move...")
         self._set_turn_badge()
         self.animating = True
-        session = self.game_session
         self._animate_drop(
             column=best_column,
             player=COMPUTER,
             on_complete=lambda row, column: self._after_computer_move(row, column, stats),
-            session=session,
         )
 
     def _after_computer_move(self, row: int, column: int, stats: SearchStats) -> None:
@@ -1295,15 +1203,8 @@ class Connect4App:
         self._update_score_display()
         self._redraw_scene()
 
-    def _animate_drop(
-        self,
-        column: int,
-        player: int,
-        on_complete: Callable[[int, int], None],
-        session: int | None = None,
-    ) -> None:
+    def _animate_drop(self, column: int, player: int, on_complete: Callable[[int, int], None]) -> None:
         layout = self.layout
-        expected_session = self.game_session if session is None else session
         row = self._find_drop_row(column)
         if row is None or self.canvas is None:
             self.animating = False
@@ -1346,13 +1247,6 @@ class Connect4App:
 
         def step() -> None:
             nonlocal current_step
-            if expected_session != self.game_session or not self.game_active:
-                self.canvas.delete(shadow)
-                self.canvas.delete(disc)
-                self.animating = False
-                self._redraw_scene()
-                return
-
             current_step += 1
             progress = current_step / self.drop_animation_steps
             eased = 1 - (1 - progress) ** 3
@@ -1362,14 +1256,10 @@ class Connect4App:
             self.canvas.coords(disc, x1, top, x2, bottom)
 
             if current_step < self.drop_animation_steps:
-                self._schedule_once(self.drop_animation_interval, step)
+                self.root.after(self.drop_animation_interval, step)
             else:
                 self.canvas.delete(shadow)
                 self.canvas.delete(disc)
-                if expected_session != self.game_session or not self.game_active:
-                    self.animating = False
-                    self._redraw_scene()
-                    return
                 self.board.drop_piece(column, player)
                 on_complete(row, column)
 

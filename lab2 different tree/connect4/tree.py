@@ -135,3 +135,39 @@ class TreePrinter:
         for line in lines:
             self._emit(f"{child_indent}{line}")
         self._record(kind="block", depth=depth, text=label, lines=lines)
+
+    def chosen_branch(
+        self,
+        board: "Connect4Board",
+        pv: list[int],
+        start_player: int,
+        board_renderer: Callable[["Connect4Board"], list[str]],
+    ) -> None:
+        """Render the explicit tree path for the principal variation with actual board states."""
+        if not self.enabled:
+            return
+
+        self.banner("PRINCIPAL VARIATION (CHOSEN BRANCH)")
+        
+        # We enforce rendering this, bypassing max_depth using direct _emit and _record
+        current_player = start_player
+        for i, col in enumerate(pv):
+            board.drop_piece(col, current_player)
+            
+            player_name = "AI" if current_player == 2 else "Human"
+            indent = "  " * i
+            
+            branch_message = f"{player_name} chooses column {col}"
+            self._emit(f"{indent}└── {branch_message}")
+            
+            node_lines = board_renderer(board)
+            child_indent = "  " * (i + 1)
+            for line in node_lines:
+                self._emit(f"{child_indent}{line}")
+                
+            self._record(kind="pv_node", depth=i, text=branch_message, lines=node_lines)
+            
+            current_player = 1 if current_player == 2 else 2
+
+        for col in reversed(pv):
+            board.undo_piece(col)

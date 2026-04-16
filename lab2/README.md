@@ -9,17 +9,7 @@ The AI decision process is implemented mainly in [connect4/ai.py](connect4/ai.py
 python main.py
 ```
 
-## What Happens During An AI Move
-
-When it is the computer's turn:
-
-1. The game calls `choose_move(...)` in [connect4/ai.py](connect4/ai.py).
-2. The selected algorithm is normalized and validated (`minimax`, `alpha-beta`, or `expected`).
-3. Search stats start (node counter + timer).
-4. Recursive search starts from the root using `_search(...)` with `maximizing=True`.
-5. The recursion explores future moves up to the selected depth.
-6. At leaf states (depth = 0 or board full), the board is scored by [connect4/heuristics.py](connect4/heuristics.py).
-7. The best root move is returned to the game.
+The GUI supports three AI modes, configurable depth, restart, move timing, node counting, and console minimax tracing.
 
 ## AI Algorithms Explained
 
