@@ -4,22 +4,23 @@ The heuristic is intentionally stronger than a simple piece-counting model.
 It rewards actual connect-fours, near-complete threats, and control of the
 center column while also penalizing the opponent's opportunities.
 
-============ شرح الـ Heuristic - كيف نقيّم موضع اللوحة ============
+============ Heuristic Overview - How We Score a Board Position ============
 
-الـ Heuristic هو "نسخة مختصرة" من اللعبة الكاملة - يقولنا:
-هل هالموضع حسن للـ AI أم سيء؟ كام نقطة؟
+The heuristic is a compact approximation of the full game. It answers:
+is this position good for the AI or good for the opponent, and by how much?
 
-في Minimax: لما نصل لأخر عمق نسمح، نستعمل الـ heuristic بدل ما نلعب اللعبة لآخرها.
-كل موضع يأخذ score:
-  - موجب = حسن للـ AI
-  - سالب = حسن للخصم
-  - 0 = محايد
+In Minimax, once we reach the allowed depth limit, we evaluate the position
+using this heuristic instead of playing to the very end.
+Each position gets a score:
+    - positive = good for the AI
+    - negative = good for the opponent
+    - 0 = neutral
 
-الـ heuristic تركز على:
-1. الأربعات (connect-4): أقوى pattern - خمس تعطي كتير من النقاط
-2. الثلاثات المفتوحة (open-3): تهديد خطير - ممكن يبقى 4 بحركة واحدة
-3. الثنيات المفتوحة (open-2): تهديد متوسط - قاعدة لتطوير أقوى
-4. التحكم بالوسط (center): عمود وسط بيعطي استراتيجية أفضل
+This heuristic focuses on:
+1. connect-4 patterns: strongest pattern and highest value
+2. open-three patterns: dangerous threat that can win in one move
+3. open-two patterns: medium threat and foundation for stronger threats
+4. center control: center column usually gives better strategic options
 """
 
 from __future__ import annotations
@@ -43,10 +44,10 @@ class HeuristicWeights:
     Large weights (connect4) dominate everything - because they're most important!
     """
 
-    connect4: int = 12_000   # winning position - الأهم!
-    open_three: int = 220     # 3 في خط + مكان فارغ = تهديد قريب
-    open_two: int = 45        # 2 في خط + مكانين فارغين = قاعدة
-    center_piece: int = 9      # تحكم بالوسط جيد استراتيجياً
+    connect4: int = 12_000   # winning position - highest priority
+    open_three: int = 220     # 3 in a row + 1 empty = immediate threat
+    open_two: int = 45        # 2 in a row + 2 empty = useful foundation
+    center_piece: int = 9      # center control is strategically valuable
 
 
 class HeuristicEvaluator:
