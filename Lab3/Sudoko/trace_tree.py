@@ -20,7 +20,8 @@ def solve_mac_trace(board):
     tree_lines = []
     
     if not ac3(domains):
-        return False, []
+        tree_lines.append("Root Node: Hard Board (Initial AC-3 failed)")
+        return tree_lines
         
     def _backtrack_mac(domains, depth=0):
         if depth > 4: 
@@ -67,7 +68,7 @@ def solve_mac_trace(board):
     _backtrack_mac(domains)
     return tree_lines
 
-while True:
+for _ in range(200):
     board = generate_random_puzzle("hard")
     # Need to keep a copy of the board because it might get modified or we just want to print the original
     orig_board = copy.deepcopy(board)
@@ -78,3 +79,5 @@ while True:
         print("\nTrace Tree:")
         print("\n".join(lines))
         break
+else:
+    print("No backtracking trace found after 200 attempts.")

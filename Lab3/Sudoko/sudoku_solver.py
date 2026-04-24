@@ -1,6 +1,7 @@
 import random
 import copy
 import time
+from collections import deque
 
 def get_neighbors(r, c):
     """
@@ -146,7 +147,7 @@ def ac3(domains):
     Apply the AC-3 algorithm to enforce arc consistency.
     Returns True if it succeeds (no domain becomes empty), False otherwise.
     """
-    queue = []
+    queue = deque()
     # Initialize the queue with all possible arcs in the Sudoku grid
     for r in range(9):
         for c in range(9):
@@ -154,7 +155,7 @@ def ac3(domains):
                 queue.append(((r, c), neighbor))
                 
     while queue:
-        xi, xj = queue.pop(0)
+        xi, xj = queue.popleft()
         # Check if we need to remove any values from xi's domain
         if revise(domains, xi, xj):
             # If domain becomes empty, no solution is possible
@@ -225,14 +226,14 @@ def _backtrack_mac(domains, board):
         new_domains[var] = [val]
         
         # Add arcs to queue to check consistency of this assignment
-        queue = []
+        queue = deque()
         for neighbor in get_neighbors(var[0], var[1]):
             queue.append((neighbor, var))
             
         # Run AC-3 from this state
         is_consistent = True
         while queue:
-            xi, xj = queue.pop(0)
+            xi, xj = queue.popleft()
             if revise(new_domains, xi, xj):
                 if len(new_domains[xi]) == 0:
                     is_consistent = False
