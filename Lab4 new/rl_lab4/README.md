@@ -14,6 +14,12 @@ Run the main driver to compute policies for each (R1,R2) pair:
 python3 rl_lab4/main.py
 ```
 
+Run the GUI (Tkinter):
+
+```bash
+python3 rl_lab4/gui.py
+```
+
 Run tests:
 
 ```bash
