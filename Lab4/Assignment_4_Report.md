@@ -69,12 +69,12 @@ The 9-point gap creates a clear preference for $R_2$, but the absolute scale of 
 
 ### Case 4: $R_1 = 10$, $R_2 = 15$
 **Policy Structure**:
-- Generally "indifferent" movement, heavily relying on proximity.
-- High variance depending on starting column.
-- Urgent `Up` movement on the right side to escape penalties.
+- Almost **universally `Up`** across the bottom 4 rows.
+- `Right` movement is strictly reserved for the top row to safely cross over to $R_2$.
 
 **Intuitive Explanation**:
-The 5-point differential constitutes the tightest race. When the discount factor ($\gamma=0.95$) is factored in, being just 1 or 2 extra steps away from $R_2$ makes its mathematical value nearly equal to $R_1$. As a result, the distance almost entirely dictates the policy: cells close to $R_1$ go to $R_1$, and cells close to $R_2$ go to $R_2$. The slip probability (10%) and the penalty columns become significant deterrents because the agent lacks a massive goal payoff to justify risky navigation.
+At first glance, one might expect the agent to move `Right` towards the larger 15 reward. However, the optimal policy is overwhelmingly `Up`. This is a brilliant mathematical consequence of "penalty avoidance routing." 
+Columns 3 and 4 contain severe penalties (-1 and -2) in rows 1 through 4. If the agent moves `Right` while in the lower rows, it will enter these negative columns and accumulate severe penalties while trying to move up to $R_2$. The mathematically optimal route is to move `Up` through the "safe" columns (Cols 0, 1, 2 which yield +2, +1, 0) until reaching the top row (row 0), and *only then* move `Right`. In the top row, moving right bypasses the -2 cells completely! Furthermore, for the left side of the grid, the 0.95 discount factor makes the much closer $R_1=10$ just as attractive. Thus, the agent intelligently routes around hazards rather than blindly chasing the highest number.
 
 ## 4. Convergence & Algorithm Comparison
 

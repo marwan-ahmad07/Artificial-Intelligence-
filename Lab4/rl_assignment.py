@@ -321,7 +321,7 @@ class PolicyIteration:
         
         self.iterations = 0
     
-    def policy_evaluation(self, max_iterations=100):
+    def policy_evaluation(self, max_iterations=1000):
         """
         Evaluate the current policy by solving for V^π.
         
@@ -784,61 +784,39 @@ CASE: R1=10, R2=15 (Small Difference: dR = 5)
 DETAILED ANALYSIS:
 
 Overall Policy Character:
-  The 5-point difference is smallest of all cases, creating subtle preference for R2.
-  The policy should show the most "indifference" or "balanced exploration."
-  Cells near (0,0) should show weaker directional bias. Negative penalties become
-  highly influential. The discount factor creates a nearly level playing field.
+  At first glance, one might expect the agent to move "Right" towards the larger 15 reward. 
+  However, the policy is overwhelmingly "Up" across almost the entire grid. 
+  This is a mathematically optimal strategy to avoid the severe penalty zones.
 
 Technical Deep Dive:
 
-1. Nearly Equivalent Discounted Values:
-   - Effective value of R1: 0.95^1 × 10 = 9.50
-   - Effective value of R2: 0.95^3 × 15 ≈ 12.88 (3 steps away)
-   - Margin: 12.88 - 9.50 = 3.38 (only ~35% better for R2)
-   - This is the tightest race of all four cases
-   - From distant cells (5+ steps), this difference becomes nearly imperceptible
+1. The "Trench" Avoidance Strategy:
+   - Column 3 gives -1 and Column 4 gives -2 for rows 1-4.
+   - If the agent moves RIGHT while in the lower rows, it will enter these negative columns 
+     and accumulate severe penalties (-1 and -2) while trying to move up to R2.
+   - The mathematically optimal route to R2 from the bottom is to move UP through the 
+     "safe" columns (Cols 0, 1, 2 which yield +2, +1, 0) until reaching the top row (row 0), 
+     and ONLY THEN move RIGHT.
+   - In the top row, moving right only incurs a single -1 penalty (at 0,3) before reaching 
+     R2=15, completely bypassing the -2 cells!
 
-2. Distance Dominates Small Reward Differences:
-   - A cell 2 steps from R1 vs. 3 steps from R2:
-     V1 = 0.95^2 × 10 = 9.025 vs. V2 = 0.95^3 × 15 = 12.879
-   - R2 still wins, but barely when travel costs are included
-   - In some cases, 0.95^2 × 15 = 13.538 would make R2 dominate
-   - This creates complex, cell-dependent decision boundaries
+2. Discounting and Proximity to R1:
+   - For cells on the left side (Cols 0, 1), R1=10 is much closer than R2=15.
+   - Because of the 0.95 discount factor, the closer R1=10 is often just as valuable or 
+     more valuable than the distant R2=15.
+   - Thus, the left side moves UP to reach R1=10, and the right side moves UP to safely 
+     reach the top row before heading to R2=15.
 
-3. Penalty Columns Become Decision Factors:
-   - Column 3 (-1 penalty): Now roughly 10% of R1 or 6-7% of R2
-   - Column 4, rows 1-4 (-2 penalty): Now roughly 20% of R1 or 13% of R2
-   - Avoiding these penalties becomes a significant strategy
-   - Cells in column 4 will strongly prefer UP over DOWN (escape -2)
-   - Cells in column 3 will calculate carefully: going through is costly
-
-4. Stochastic Transition Risk Magnification:
-   - With small reward difference, slip risk is critical
-   - From (2,3), attempting RIGHT (toward R2): 70% → (2,4) with -2, then must climb to R2
-   - vs. attempting UP: 70% → (1,3) with -1, then continue upward
-   - Expected values become very close, creating policy ambiguity
-   - Ties in Q-values → policy depends on argmax tie-breaking (first/random action wins)
-
-5. Value Landscape Topology:
-   - Most "flat" value landscape of all cases
-   - Values don't differ drastically across the grid
-   - This creates a "wandering" policy with less clear direction
-   - Cells far from both rewards show mixed actions (policy seems indifferent)
-
-6. Discount Factor Critical Impact:
-   - 0.95 per step: substantial decay becomes noticeable
-   - Very bottom-left corner (0,0) is 4-5 steps from R2 in optimal path
-   - Discounted R2 value there: 0.95^4 × 15 ≈ 12.24 vs. R1 at 0.95^1 × 10 = 9.50
-   - Still prefers R2, but R1 is competitive (84% of R2's value)
-   - This should produce some UP and LEFT movement from lower-left
+3. Why not more "Right"?
+   - The only states that move RIGHT are those in the top row (0,1; 0,2; 0,3) and one state 
+     just below it (1,2). Every other state realizes that moving Right prematurely is too 
+     costly due to the -2 penalty column.
 
 Expected Policy Structure:
-   - Top row: Mixed UP, RIGHT, LEFT (genuine indifference)
-   - Left column: UP more than LEFT (R2 competitive despite R1 proximity)
-   - Right column (column 4): UP almost always (escape -2 urgently)
-   - Middle cells: Balanced mix, no overwhelming direction
-   - More variability in policy compared to extreme reward cases
-   - Random seed sensitive: ties in Q-values may produce different policies in PI runs
+   - Almost universally UP across the bottom 4 rows.
+   - RIGHT movement is strictly reserved for the top row to safely cross over to R2.
+   - This proves the agent is intelligently routing around the hazards rather than blindly 
+     chasing the highest number.
         """
     }
     
