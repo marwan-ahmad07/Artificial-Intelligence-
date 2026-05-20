@@ -27,9 +27,9 @@ def value_iteration(env: GridWorld, gamma: float = 0.95, theta: float = 1e-4, ma
                     q += p * (r + (0 if done else gamma * V[s2]))
                 q_values.append(q)
             # Update V(s) to the best action value (Bellman optimality backup).
-            V[s] = max(q_values)
-            # Track the largest update across all states in this sweep.
-            delta = max(delta, abs(v - V[s]))
+            V[s] = max(q_values) #V(s) = max over actions [ reward + gamma * future value ]
+            # Track the largest update across all states in this sweep. 
+            delta = max(delta, abs(v - V[s])) 
         # Stop when the largest change is below the threshold.
         if delta < theta:
             break
