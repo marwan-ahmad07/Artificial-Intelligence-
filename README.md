@@ -29,6 +29,12 @@ Engineering an intelligent agent capable of solving complex Sudoku puzzles using
 - **Optimization**: Integrated **Arc Consistency (AC-3/MAC)** for rigorous constraint propagation, significantly pruning the search space.
 - **Benchmarking**: Performance evaluation across varying puzzle difficulties with a graphical user interface.
 
+### 🔹 [Lab 4: Reinforcement Learning (Gridworld Planning)](./Lab4%20new/rl_lab4)
+Implementation of classic reinforcement learning planning methods to solve a Gridworld environment.
+- **Algorithms**: Value Iteration and Policy Iteration for optimal policy derivation.
+- **Visualization**: Interactive GUI to visualize the agent's policy and state values.
+- **Testing**: Unit tests validating algorithm correctness on standard scenarios.
+
 ---
 
 ## ⚙️ Technologies & Tools
